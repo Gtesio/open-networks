@@ -1,4 +1,12 @@
 import numpy as np
+# es 1
+"""
+array1 = np.empty([4, 2], dtype= np.uint32)
+print(array1)
+print(array1.shape)
+print(array1.ndim)
+print(array1.itemsize)
+"""
 # es 2
 #a = np.arange(100, 200, 10).reshape(5, 2)
 #print(a)
