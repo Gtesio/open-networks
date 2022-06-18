@@ -1,49 +1,5 @@
-class SignalInformation:
-    def __init__(self, signal_power, path):
-        self._signal_power = signal_power
-        self._noise_power = 0
-        self._latency = 0
-        self._path = path
-
-    def getsp(self):
-        return self._signal_power
-
-    def setsp(self, power):
-        self._signal_power = power
-
-    def getnp(self):
-        return self._noise_power
-
-    def setnp(self, power):
-        self._noise_power = power
-
-    def getlat(self):
-        return self._latency
-
-    def setlat(self, latency):
-        self._latency = latency
-
-    def getpath(self):
-        return self._path
-
-    def setpath(self, path):
-        self._path = path
-
-    def addnoise(self, noise):
-        self._noise_power += noise
-
-    def addpower(self, power):
-        self._signal_power += power
-
-    def addlatency(self, latency):
-        self._latency += latency
-
-    def updpath(self):
-        if self._path:
-            print("crossed node: ", self._path[0])
-            self._path = self._path[1:]
-        else:
-            print("Error, path empty")
+import json
+import math
 
 
 class Node:
@@ -118,7 +74,7 @@ class Line:
         return self._length / 199e6
 
     def noisegeneration(self, signal):
-        return 1e-9 * signal.getsp() * self._length
+        return 1e-9 * signal.getsp() * self._length  # change with better formula later
 
     def propagate(self, signal):
         print("in line " + self._label)
@@ -134,25 +90,29 @@ class Line:
             print("error, path is empty")
 
 
-lineac = Line("ac", 1000000)
-nodea = Node("a", (4, 5), "")
-nodec = Node("c", (3, 2), "")
-signal1 = SignalInformation(100, "ac")
-signal2 = SignalInformation(100, "aca")
+class Network:
+    def __init__(self, filename):
+        with open(filename) as f:
+            network_data = json.load(f)
+            nodelist = network_data.keys()
+            self._nodes = dict()
+            self._lines = dict()
+            for n in nodelist:  # aggiungo i nodi alla rete
+                nodo = Node(n, network_data[n]["position"], network_data[n]["connected_nodes"])
+                for lin in network_data[n]["connected_nodes"]: # aggiungo le linee collegate al nodo corrente
+                    label = n+lin
+                    linea = Line(label, 0)  # la lunghezza sarà calcolata in seguito
+                    self._lines[label] = linea
+                self._nodes[n] = nodo
+            for lin in self._lines:  # calcolo la lunghezza
+                nome = self._lines[lin].getlabel()
+                dist = math.sqrt((network_data[nome[0]]["position"][0] - network_data[nome[1]]["position"][0])**2 + (network_data[nome[0]]["position"][1] - network_data[nome[1]]["position"][1])**2)
+                # valutare se approssimare la distanza con la funzione round()
+                self._lines[lin].setlength(dist)
+                print(self._lines[lin].getlength())
 
-succ = {"a": nodea, "c": nodec}
-lineac.setsuccessive(succ)
+            print(self._nodes)
+            print(self._lines)
 
-succ = {"ac": lineac}
-nodea.setsuccessive(succ)
 
-succ = {"ca": lineac}
-nodec.setsuccessive(succ)
-
-print("start signal 1", signal1.getlat(), signal1.getnp())
-nodea.propagate(signal1)
-print("finish signal 1", signal1.getlat(), signal1.getnp())
-
-print("start signal 2", signal2.getlat(), signal2.getnp())
-nodea.propagate(signal2)
-print("finish signal 2", signal2.getlat(), signal2.getnp())
+net = Network("../resources/nodes.json")
