@@ -3,7 +3,7 @@ class SignalInformation:
         self._signal_power = signal_power
         self._noise_power = 0
         self._latency = 0
-        self._path = path
+        self._path = path.upper()
 
     def getsp(self):
         return self._signal_power
@@ -40,7 +40,6 @@ class SignalInformation:
 
     def updpath(self):
         if self._path:
-            print("crossed node: ", self._path[0])
             self._path = self._path[1:]
         else:
             print("Error, path empty")
