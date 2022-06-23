@@ -1,6 +1,8 @@
 import json
 import math
 import matplotlib.pyplot as plt
+import pandas as pd
+import info
 
 
 class Node:
@@ -50,6 +52,7 @@ class Line:
         self._label = label
         self._length = length  # in meters
         self._successive = {}
+        self._state = 1
 
     def setlabel(self, label):
         self._label = label
@@ -87,6 +90,12 @@ class Line:
         else:
             print("error, path is empty")
 
+    def setstate(self, state=1):
+        self._state = state
+
+    def getstate(self):
+        return self._state
+
 
 class Network:
     def __init__(self, filename):
@@ -109,6 +118,7 @@ class Network:
             # round() perchè ritengo 1m poco significativo per distanze di decine di km e facilita la lettura dei valori
                 self._lines[lin].setlength(dist)
                 # print(self._lines[lin].getlabel())
+        self._weighted_path = None
 
     def connect(self):
         for node in self._nodes:  # collego i nodi impostando nella var successive il dizionario con le relative linee
@@ -122,6 +132,27 @@ class Network:
             successivenode = line[1]
             successivedict = {successivenode: self._nodes[successivenode]}
             self._lines[line].setsuccessive(successivedict)
+        #  generate weighted path pandas dataframe
+        indexes = []
+        data = {'latency': [], 'noise': [], 'SNR': []}
+        for snode in self._nodes:
+            for enode in self._nodes:
+                if snode != enode:
+                    path = self.findpaths(snode, enode)
+                    for p in path:
+                        signal = info.SignalInformation(1e-3, p)
+                        indexes.append('->'.join(p))
+                        self.propagate(signal)
+                        data['latency'].append(signal.getlat())
+                        data['noise'].append(signal.getnp())
+                        data['SNR'].append(10 * math.log(signal.getsp() / signal.getnp()))
+        self._weighted_path = pd.DataFrame(data, index=indexes)
+
+    def getweightedpath(self):
+        if self._weighted_path is None:
+            print("weighted path not calculated")
+        else:
+            return self._weighted_path
 
     def findpaths(self, start, finish, risultato=None, ricorsione=[]):
         start = start.upper()
@@ -166,3 +197,112 @@ class Network:
             plt.annotate(node, (x, y), textcoords="offset points", xytext=(10, 1), weight="bold", backgroundcolor="w",
                          bbox=dict(facecolor="k", alpha=0.05))
         plt.show()
+
+    def find_best_snr(self, snode, enode):
+        if self._weighted_path is None:
+            print("weighted path not calculated")
+        else:
+            ppaths = self.findpaths(snode, enode)  # possible paths
+            indexes = []
+            for pp in ppaths:  # controllo che tutte le linee del percorso siano libere
+                empty = 1
+                for i in range(len(pp)-1):
+                    line = str(pp[i])+str(pp[i+1])
+                    if not self._lines[line].getstate():
+                        empty = 0
+                if empty:
+                    indexes.append('->'.join(pp))
+            wdf = self.getweightedpath()
+            wdf = wdf.filter(items=indexes, axis=0)
+            if wdf.empty:
+                return None
+            bestsnr = wdf['SNR'].max()
+            bestindex = wdf['SNR'].idxmax()
+            result = {bestindex: bestsnr}
+            return result
+
+    def find_best_lat(self, snode, enode):
+        if self._weighted_path is None:
+            print("weighted path not calculated")
+        else:
+            ppaths = self.findpaths(snode, enode)  # possible paths
+            indexes = []
+            for pp in ppaths:
+                empty = 1
+                for i in range(len(pp) - 1):
+                    line = str(pp[i]) + str(pp[i + 1])
+                    if not self._lines[line].getstate():
+                        empty = 0
+                if empty:
+                    indexes.append('->'.join(pp))
+            wdf = self.getweightedpath()
+            wdf = wdf.filter(items=indexes, axis=0)
+            if wdf.empty:
+                return None
+            bestlat = wdf['latency'].min()
+            bestindex = wdf['latency'].idxmin()
+            result = {bestindex: bestlat}
+            return result
+
+    def stream(self, connections, label='latency'):
+        label = label.lower()
+        if self._weighted_path is None:
+            print("error, connect the network before using stream")
+            return
+        for con in connections:
+            if label == 'latency':
+                result = self.find_best_lat(con.getinput(), con.getoutput())
+            else:
+                result = self.find_best_snr(con.getinput(), con.getoutput())
+            if result is None:
+                con.setlat(0)
+                con.setsnr(None)
+            else:
+                pathindex = ''.join(result.keys())
+                path = pathindex.replace("->", "")
+                power = con.getsp()
+                signal = info.SignalInformation(power, path)
+                self.propagate(signal)
+                con.setlat(signal.getlat())
+                con.setsnr(self._weighted_path['SNR'][pathindex])
+                for i in range(len(path)-1):  # rende la linea occupata
+                    line = str(path[i])+str(path[i+1])
+                    self._lines[line].setstate(0)
+        self.freelines()
+
+    def freelines(self):  # per liberare le linee al termine della funzione stream
+        for line in self._lines:
+            self._lines[line].setstate(1)
+
+    def getnodes(self):
+        return ''.join(self._nodes.keys())
+
+
+class Connection:
+    def __init__(self, input, output, signal_power=1e-3):
+        self._input = input
+        self._output = output
+        self._signal_power = signal_power
+        self._latency = 0.0
+        self._snr = 0.0
+
+    def getinput(self):
+        return self._input
+
+    def getoutput(self):
+        return self._output
+
+    def getsp(self):
+        return self._signal_power
+
+    def getlat(self):
+        return self._latency
+
+    def getsnr(self):
+        return self._snr
+
+    def setlat(self, lat):
+        self._latency = lat
+
+    def setsnr(self, snr):
+        self._snr = snr
