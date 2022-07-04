@@ -3,6 +3,12 @@ import math
 import matplotlib.pyplot as plt
 import pandas as pd
 import info
+from scipy.special import erfcinv
+from science_utils import lintodb, dbtolin
+
+BERt = 10e-3  # BitErrorRate
+Rs = 32e9  # symbol rate
+Bn = 12.5e9  # noise bandwidth
 
 
 class Node:
@@ -44,15 +50,27 @@ class Node:
             if nextline in self._successive:
                 self._successive[nextline].propagate(signal)
             else:
-                print("Error: line " + nextline + " to " + nextline[1] + " unexistent")
+                print("Error: line " + nextline + " to " + nextline[1] + " nonexistent")
+
+    def probe(self, signal):  # uguale a propagate ma ignora l'occupazione dei canali
+        signal.updpath()
+        path = signal.getpath()
+        if path:
+            nextline = self._label + path[0]
+            if nextline in self._successive:
+                self._successive[nextline].probe(signal)
+            else:
+                print("Error: line " + nextline + " to " + nextline[1] + " nonexistent")
 
 
 class Line:
-    def __init__(self, label, length):
+    def __init__(self, label, length, channels=1):
         self._label = label
         self._length = length  # in meters
         self._successive = {}
-        self._state = 1
+        self._state = []  # stato dei canali, 1 = libero, 0 = occupato, indice = canale
+        for i in range(channels):
+            self._state.append(1)
 
     def setlabel(self, label):
         self._label = label
@@ -80,21 +98,47 @@ class Line:
 
     def propagate(self, signal):
         path = signal.getpath()
-        signal.addlatency(self.latencygeneration())
-        signal.addnoise(self.noisegeneration(signal))
+        channel = signal.getchannel()
         if path:
             if path[0] in self._successive:
-                self._successive[path[0]].propagate(signal)
+                if channel > len(self._state):
+                    print("il canale richiesto non esiste")
+                    signal.setlat(0)
+                    signal.setnp(None)
+                else:
+                    if self._state[channel]:  # controllo che il canale assegnato al segnale sia libero
+                        self._state[channel] = 0
+                        signal.addlatency(self.latencygeneration())
+                        signal.addnoise(self.noisegeneration(signal))
+                        self._successive[path[0]].propagate(signal)
+                    else:
+                        print("canale occupato")
             else:
                 print("error, no successive node found")
         else:
             print("error, path is empty")
 
-    def setstate(self, state=1):
-        self._state = state
+    def probe(self, signal):  # uguale a propagate ma ignora l'occupazione dei canali
+        path = signal.getpath()
+        if path:
+            if path[0] in self._successive:
+                signal.addlatency(self.latencygeneration())
+                signal.addnoise(self.noisegeneration(signal))
+                self._successive[path[0]].probe(signal)
+            else:
+                print("error, no successive node found")
+        else:
+            print("error, path is empty")
 
-    def getstate(self):
+    def setstate(self, channel, state=1):  # imposta lo stato di un singolo canale, default lo libera
+        self._state[channel] = state
+
+    def getstate(self):  # ottiene lo stato di tutti i canali
         return self._state
+
+    def freechannels(self):  # libera tutti i canali
+        for ch in self._state:
+            self._state[ch] = 1
 
 
 class Network:
@@ -106,19 +150,21 @@ class Network:
             self._lines = dict()
             for n in nodelist:  # aggiungo i nodi alla rete
                 nodo = Node(n, network_data[n]["position"], network_data[n]["connected_nodes"])
-                for lin in network_data[n]["connected_nodes"]: # aggiungo le linee collegate al nodo corrente
+                for lin in network_data[n]["connected_nodes"]:  # aggiungo le linee collegate al nodo corrente
                     label = n+lin
-                    linea = Line(label, 0)  # la lunghezza sarà calcolata in seguito
+                    linea = Line(label, 0, 10)  # la lunghezza sarà calcolata in seguito, 10 sono i canali per ex
                     self._lines[label] = linea
                 self._nodes[n] = nodo
             for lin in self._lines:  # calcolo la lunghezza
                 nome = self._lines[lin].getlabel()
                 dist = round(math.sqrt((network_data[nome[0]]["position"][0] - network_data[nome[1]]["position"][0])**2 +
                                        (network_data[nome[0]]["position"][1] - network_data[nome[1]]["position"][1])**2))
-            # round() perchè ritengo 1m poco significativo per distanze di decine di km e facilita la lettura dei valori
+            # round()
+                # perchè ritengo 1m poco significativo per distanze di decine di km e facilita la lettura dei valori
                 self._lines[lin].setlength(dist)
                 # print(self._lines[lin].getlabel())
         self._weighted_path = None
+        self._route_space = None
 
     def connect(self):
         for node in self._nodes:  # collego i nodi impostando nella var successive il dizionario con le relative linee
@@ -142,11 +188,35 @@ class Network:
                     for p in path:
                         signal = info.SignalInformation(1e-3, p)
                         indexes.append('->'.join(p))
-                        self.propagate(signal)
+                        self.probe(signal)
                         data['latency'].append(signal.getlat())
                         data['noise'].append(signal.getnp())
-                        data['SNR'].append(10 * math.log(signal.getsp() / signal.getnp()))
+                        data['SNR'].append(lintodb(signal.getsp() / signal.getnp()))  # formula calcolo snr
         self._weighted_path = pd.DataFrame(data, index=indexes)
+        self.updateroutespace()
+
+    def updateroutespace(self):
+        self._route_space = self._weighted_path
+        indexes = list(self._route_space.index.values)  # percorsi con le "->"
+        indexpath = []  # conterrà i percorsi senza le "->"
+        choccupancy = None
+        for index in indexes:
+            indexpath.append("".join(index.split("->")))
+        for path in indexpath:
+            lineoccupancy = [1] * len(self._lines[path[0]+path[1]].getstate())
+            #  lineoccupancy serve per capire se un canale è libero per tutto il percorso (libero a tratti non va bene)
+            if choccupancy is None:  # inizializzo choccupancy che andrà nel dataframe
+                choccupancy = [[] for i in range(len(lineoccupancy))]
+            for s in range(len(path)-1):  # prendo due nodi, se non tolgo 1 prenderei il nodo finale+1 che non esiste
+                line = path[s] + path[s+1]  # ABCD --> AB BC CD
+                state = self._lines[line].getstate()  # stato dei canali della linea AB, ipotizzo il num canali sia cost
+                for ch in range(len(state)):  # numero del canale
+                    if not state[ch]:
+                        lineoccupancy[ch] = 0  # un canale occupato su un tratto rende la tutta la linea occ sul canale
+            for i in range(len(choccupancy)):   # aggiungo le linee occupate
+                choccupancy[i].append(lineoccupancy[i])
+        for i in range(len(choccupancy)):  # aggiungo le colonne
+            self._route_space[i] = choccupancy[i]
 
     def getweightedpath(self):
         if self._weighted_path is None:
@@ -154,13 +224,21 @@ class Network:
         else:
             return self._weighted_path
 
-    def findpaths(self, start, finish, risultato=None, ricorsione=[]):
+    def getroutespace(self):
+        if self._route_space is None:
+            print("route space not calculated")
+        else:
+            return self._route_space
+
+    def findpaths(self, start, finish, risultato=None, ricorsione=None):
+        if ricorsione is None:
+            ricorsione = []
         start = start.upper()
         finish = finish.upper()  # per rendere la funzione case-agnostic
         if risultato is None:
             risultato = []
         if start == finish:
-            ricorsione.append(start) #questo serve solo ad aggiungere il nome del nodo finale nel risultato
+            ricorsione.append(start)  # questo serve solo ad aggiungere il nome del nodo finale nel risultato
             risultato.append(''.join(ricorsione))
             ricorsione.pop()
         else:
@@ -176,6 +254,13 @@ class Network:
     def propagate(self, signal):
         path = signal.getpath()
         self._nodes[path[0]].propagate(signal)
+        results = [signal.getnp(), signal.getlat()]
+        self.updateroutespace()
+        return results
+
+    def probe(self, signal):
+        path = signal.getpath()
+        self._nodes[path[0]].probe(signal)
         results = [signal.getnp(), signal.getlat()]
         return results
 
@@ -199,20 +284,27 @@ class Network:
         plt.show()
 
     def find_best_snr(self, snode, enode):
-        if self._weighted_path is None:
-            print("weighted path not calculated")
+        if self._route_space is None:
+            print("route space not calculated")
         else:
             ppaths = self.findpaths(snode, enode)  # possible paths
             indexes = []
-            for pp in ppaths:  # controllo che tutte le linee del percorso siano libere
-                empty = 1
+            channelstatus = None  # creo
+            for pp in ppaths:  # controllo che tutte le linee del percorso siano libere su almeno un canale
+                if channelstatus is not None:  # significa che ho fatto il ciclo almeno una volta e quindi preparo la
+                    for chs in range(len(channelstatus)):  # variable per l'utilizzo in un nuovo percorso
+                        channelstatus[chs] = 1
                 for i in range(len(pp)-1):
                     line = str(pp[i])+str(pp[i+1])
-                    if not self._lines[line].getstate():
-                        empty = 0
-                if empty:
+                    chstate = self._lines[line].getstate()
+                    if channelstatus is None:  # durante il primo ciclo imposto la lunghezza della variabile ipotizzando
+                        channelstatus = [[] for i in range(len(chstate))]  # il numero di canali sia costante su tutta la rete
+                    for ch in range(len(chstate)):
+                        if not chstate[ch]:  # se c'è anche solo un canale occupato su un tratto, tutto il percorso su
+                            channelstatus[ch] = 0  # quel canale non è valido
+                if 1 in channelstatus:  # se è presente anche solo un canale libero allora il percorso è valido
                     indexes.append('->'.join(pp))
-            wdf = self.getweightedpath()
+            wdf = self.getroutespace()
             wdf = wdf.filter(items=indexes, axis=0)
             if wdf.empty:
                 return None
@@ -222,20 +314,27 @@ class Network:
             return result
 
     def find_best_lat(self, snode, enode):
-        if self._weighted_path is None:
-            print("weighted path not calculated")
+        if self._route_space is None:
+            print("route space not calculated")
         else:
             ppaths = self.findpaths(snode, enode)  # possible paths
             indexes = []
-            for pp in ppaths:
-                empty = 1
+            channelstatus = None  # creo
+            for pp in ppaths:  # controllo che tutte le linee del percorso siano libere su almeno un canale
+                if channelstatus is not None:  # significa che ho fatto il ciclo almeno una volta e quindi preparo la
+                    for chs in range(len(channelstatus)):  # variable per l'utilizzo in un nuovo percorso
+                        channelstatus[chs] = 1
                 for i in range(len(pp) - 1):
                     line = str(pp[i]) + str(pp[i + 1])
-                    if not self._lines[line].getstate():
-                        empty = 0
-                if empty:
+                    chstate = self._lines[line].getstate()
+                    if channelstatus is None:  # durante il primo ciclo imposto la lunghezza della variabile ipotizzando
+                        channelstatus = [[] for i in range(len(chstate))]  # il numero di canali sia costante su tutta la rete
+                    for ch in range(len(chstate)):
+                        if not chstate[ch]:  # se c'è anche solo un canale occupato su un tratto, tutto il percorso su
+                            channelstatus[ch] = 0  # quel canale non è valido
+                if 1 in channelstatus:  # se è presente anche solo un canale libero allora il percorso è valido
                     indexes.append('->'.join(pp))
-            wdf = self.getweightedpath()
+            wdf = self.getroutespace()
             wdf = wdf.filter(items=indexes, axis=0)
             if wdf.empty:
                 return None
@@ -261,30 +360,63 @@ class Network:
                 pathindex = ''.join(result.keys())
                 path = pathindex.replace("->", "")
                 power = con.getsp()
-                signal = info.SignalInformation(power, path)
+                channel = con.getchannel()
+                if channel is None:  # non ho assegnato un canale a priori quindi cerco il primo libero
+                    rs = self.getroutespace()
+                    rs = rs.drop(columns=['SNR', 'latency', 'noise'])  # tolgo le colonne che non servono
+                    for i in range(rs.shape[1]):  # ottengo il numero di colonne che corrisponde al num di canali
+                        if rs.loc[pathindex, i]:  # assegno il primo libero
+                            channel = i
+                            break
+                signal = info.Lightpath(power, path, channel)
                 self.propagate(signal)
-                con.setlat(signal.getlat())
-                con.setsnr(self._weighted_path['SNR'][pathindex])
-                for i in range(len(path)-1):  # rende la linea occupata
-                    line = str(path[i])+str(path[i+1])
-                    self._lines[line].setstate(0)
+                if signal.getnp() is not None:  # None avviene nel caso il canale specificato non fosse valido
+                    con.setlat(signal.getlat())
+                    con.setsnr(10 * math.log(signal.getsp() / signal.getnp()))
+                else:
+                    con.setlat(0)
+                    con.setsnr(None)
         self.freelines()
 
     def freelines(self):  # per liberare le linee al termine della funzione stream
         for line in self._lines:
-            self._lines[line].setstate(1)
+            self._lines[line].freechannels()
+        self.updateroutespace()
 
     def getnodes(self):
         return ''.join(self._nodes.keys())
 
+    def calculate_bit_rate(self, path, strategy):
+        wdf = self.getweightedpath()
+        path = '->'.join(path.upper())
+        gsnr = wdf.loc[path, 'SNR']
+        if strategy == "fixed-rate":
+            if gsnr >= 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn):
+                return 100
+            else:
+                return 0
+        if strategy == "flex-rate":
+            if gsnr < 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn):
+                return 0
+            if 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn) <= gsnr < (14/3)*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn):
+                return 100
+            if (14/3)*pow(erfcinv(2*BERt), 2)*(Rs/Bn) <= gsnr < 10*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn):
+                return 200
+            if gsnr >= 10*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn):
+                return 400
+        if strategy == "shannon-rate":
+            return 2*Rs*math.log2(1 + gsnr*(Rs/Bn))
+        print("input strategy invalid")
+
 
 class Connection:
-    def __init__(self, input, output, signal_power=1e-3):
+    def __init__(self, input, output, signal_power=1e-3, channel=None):
         self._input = input
         self._output = output
         self._signal_power = signal_power
         self._latency = 0.0
         self._snr = 0.0
+        self._channel = channel
 
     def getinput(self):
         return self._input
@@ -300,6 +432,9 @@ class Connection:
 
     def getsnr(self):
         return self._snr
+
+    def getchannel(self):
+        return self._channel
 
     def setlat(self, lat):
         self._latency = lat

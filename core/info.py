@@ -44,3 +44,14 @@ class SignalInformation:
         else:
             print("Error, path empty")
 
+
+class Lightpath(SignalInformation):
+    def __init__(self, signal_power, path, channel=0):
+        super().__init__(signal_power, path)
+        self._channel = channel
+
+    def getchannel(self):
+        return self._channel
+
+    def setchannel(self, channel):
+        self._channel = channel
