@@ -396,9 +396,9 @@ class Network:
                 return 0
             if 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn) <= gsnr < (14/3)*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn):
                 return 100
-            if (14/3)*pow(erfcinv(2*BERt), 2)*(Rs/Bn) <= gsnr < 10*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn):
+            if (14/3)*pow(erfcinv(2*BERt), 2)*(Rs/Bn) <= gsnr < 10*pow(erfcinv((8/3)*BERt), 2)*(Rs/Bn):
                 return 200
-            if gsnr >= 10*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn):
+            if gsnr >= 10*pow(erfcinv((8/3)*BERt), 2)*(Rs/Bn):
                 return 400
         if strategy == "shannon-rate":
             return 2*Rs*math.log2(1 + gsnr*(Rs/Bn))

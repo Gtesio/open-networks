@@ -10,6 +10,7 @@ from core.science_utils import dbtolin, BERt, Rs, Bn
 
 net = el.Network("../resources/nodes.json")
 net.connect()
+print(net.getweightedpath())
 '''
 print(net.getweightedpath())
 print(pow(10, 70/10))
@@ -20,7 +21,7 @@ print(net.calculate_bit_rate("fe", "shannon-rate"))
 '''
 
 #  lab6 es 2 plot on same figure bit rate curve vs GSNR in dB of each tech
-
+'''
 dB = list(range(1, 101))
 fixedrate = []
 flexrate = []
@@ -54,7 +55,7 @@ plt.title("Possible bitrates for each SNR")
 plt.xlabel("dB")
 plt.ylabel("Gbps")
 plt.show()
-
+'''
 '''
 conn = []
 nodeletters = net.getnodes()
