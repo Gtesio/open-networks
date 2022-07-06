@@ -6,16 +6,54 @@ import elements as el
 import random
 import matplotlib.pyplot as plt
 
-from core.science_utils import dbtolin
+from core.science_utils import dbtolin, BERt, Rs, Bn
 
 net = el.Network("../resources/nodes.json")
 net.connect()
+'''
 print(net.getweightedpath())
 print(pow(10, 70/10))
 print(dbtolin(net.getweightedpath().loc["A->B", 'SNR']))
-print(10 * pow(erfcinv((3/2) * el.BERt), 2) * (el.Rs / el.Bn))
-print(2*el.Rs*math.log2(1 + 70*(el.Rs/el.Bn))*1e-9)
+print(10 * pow(erfcinv((3/2) * BERt), 2) * (Rs / Bn))
+print(2*Rs*math.log2(1 + 70*(Rs/Bn))*1e-9)
 print(net.calculate_bit_rate("fe", "shannon-rate"))
+'''
+
+#  lab6 es 2 plot on same figure bit rate curve vs GSNR in dB of each tech
+
+dB = list(range(1, 101))
+fixedrate = []
+flexrate = []
+shannonrate = []
+fixed = 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn)
+flex0 = fixed
+flex100 = (14/3)*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn)
+flex200 = 10*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn)
+
+for i in dB:
+    if i >= fixed:
+        fixedrate.append(100)
+    else:
+        fixedrate.append(0)
+    if i < flex0:
+        flexrate.append(0)
+    if flex0 <= i < flex100:
+        flexrate.append(100)
+    if flex100 <= i < flex200:
+        flexrate.append(200)
+    if i >= flex200:
+        flexrate.append(400)
+    shannonrate.append(round(2 * Rs * math.log2(1 + i * (Rs / Bn)) * 1e-9))
+
+plt.plot(dB, fixedrate, "k", label='fixed rate', linewidth=2)
+plt.plot(dB, flexrate, "g", label="flexible rate", linewidth=2)
+plt.plot(dB, shannonrate, "b", label="shannon rate", linewidth=2)
+plt.legend(loc='upper left')
+plt.grid()
+plt.title("Possible bitrates for each SNR")
+plt.xlabel("dB")
+plt.ylabel("Gbps")
+plt.show()
 
 '''
 conn = []

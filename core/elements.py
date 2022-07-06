@@ -4,11 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import info
 from scipy.special import erfcinv
-from science_utils import lintodb, dbtolin
-
-BERt = 10e-3  # BitErrorRate
-Rs = 32e9  # symbol rate
-Bn = 12.5e9  # noise bandwidth
+from science_utils import lintodb, dbtolin, BERt, Rs, Bn
 
 
 class Node:
