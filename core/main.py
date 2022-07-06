@@ -10,18 +10,17 @@ from core.science_utils import dbtolin, BERt, Rs, Bn
 
 net = el.Network("../resources/nodes.json")
 net.connect()
-print(net.getweightedpath())
-'''
+
 print(net.getweightedpath())
 print(pow(10, 70/10))
 print(dbtolin(net.getweightedpath().loc["A->B", 'SNR']))
 print(10 * pow(erfcinv((3/2) * BERt), 2) * (Rs / Bn))
 print(2*Rs*math.log2(1 + 70*(Rs/Bn))*1e-9)
 print(net.calculate_bit_rate("fe", "shannon-rate"))
-'''
+
 
 #  lab6 es 2 plot on same figure bit rate curve vs GSNR in dB of each tech
-'''
+
 dB = list(range(1, 101))
 fixedrate = []
 flexrate = []
@@ -29,7 +28,7 @@ shannonrate = []
 fixed = 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn)
 flex0 = fixed
 flex100 = (14/3)*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn)
-flex200 = 10*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn)
+flex200 = 10*pow(erfcinv((8/3)*BERt), 2)*(Rs/Bn)
 
 for i in dB:
     if i >= fixed:
@@ -55,7 +54,7 @@ plt.title("Possible bitrates for each SNR")
 plt.xlabel("dB")
 plt.ylabel("Gbps")
 plt.show()
-'''
+
 '''
 conn = []
 nodeletters = net.getnodes()
