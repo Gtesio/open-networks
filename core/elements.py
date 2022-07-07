@@ -368,7 +368,7 @@ class Network:
                 self.propagate(signal)
                 if signal.getnp() is not None:  # None avviene nel caso il canale specificato non fosse valido
                     con.setlat(signal.getlat())
-                    con.setsnr(10 * math.log(signal.getsp() / signal.getnp()))
+                    con.setsnr(lintodb(signal.getsp() / signal.getnp()))
                 else:
                     con.setlat(0)
                     con.setsnr(None)
@@ -385,7 +385,7 @@ class Network:
     def calculate_bit_rate(self, path, strategy):
         wdf = self.getweightedpath()
         path = '->'.join(path.upper())
-        gsnr = wdf.loc[path, 'SNR']
+        gsnr = dbtolin(wdf.loc[path, 'SNR'])
         if strategy == "fixed-rate":
             if gsnr >= 2*pow(erfcinv(2*BERt), 2)*(Rs/Bn):
                 return 100

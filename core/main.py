@@ -11,13 +11,12 @@ from core.science_utils import dbtolin, BERt, Rs, Bn
 net = el.Network("../resources/nodes.json")
 net.connect()
 
-print(net.getweightedpath())
-print(pow(10, 70/10))
-print(dbtolin(net.getweightedpath().loc["A->B", 'SNR']))
+'''
+print(pow(10, 20/10))
+print(dbtolin(net.getweightedpath().loc["A->C->D->E->F->B", 'SNR']))
 print(10 * pow(erfcinv((3/2) * BERt), 2) * (Rs / Bn))
-print(2*Rs*math.log2(1 + 70*(Rs/Bn))*1e-9)
-print(net.calculate_bit_rate("fe", "shannon-rate"))
-
+print(2*Rs*math.log(1 + dbtolin(30)*(Rs/Bn), 2))
+'''
 
 #  lab6 es 2 plot on same figure bit rate curve vs GSNR in dB of each tech
 
@@ -31,19 +30,20 @@ flex100 = (14/3)*pow(erfcinv((3/2)*BERt), 2)*(Rs/Bn)
 flex200 = 10*pow(erfcinv((8/3)*BERt), 2)*(Rs/Bn)
 
 for i in dB:
-    if i >= fixed:
+    gsnr = dbtolin(i)
+    if gsnr >= fixed:
         fixedrate.append(100)
     else:
         fixedrate.append(0)
-    if i < flex0:
+    if gsnr < flex0:
         flexrate.append(0)
-    if flex0 <= i < flex100:
+    if flex0 <= gsnr < flex100:
         flexrate.append(100)
-    if flex100 <= i < flex200:
+    if flex100 <= gsnr < flex200:
         flexrate.append(200)
-    if i >= flex200:
+    if gsnr >= flex200:
         flexrate.append(400)
-    shannonrate.append(round(2 * Rs * math.log2(1 + i * (Rs / Bn)) * 1e-9))
+    shannonrate.append(2 * Rs * math.log2(1 + gsnr*(Rs/Bn))*1e-9)
 
 plt.plot(dB, fixedrate, "k", label='fixed rate', linewidth=2)
 plt.plot(dB, flexrate, "g", label="flexible rate", linewidth=2)

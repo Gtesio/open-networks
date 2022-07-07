@@ -1,6 +1,6 @@
 import math
 
-BERt = 10e-3  # BitErrorRate
+BERt = 1e-3  # BitErrorRate
 Rs = 32e9  # symbol rate
 Bn = 12.5e9  # noise bandwidth
 
@@ -10,4 +10,4 @@ def dbtolin(dbnum):
 
 
 def lintodb(linnum):
-    return 10 * math.log(linnum)
+    return 10 * math.log(linnum, 10)
