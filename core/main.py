@@ -15,11 +15,11 @@ net.connect()
 print(pow(10, 20/10))
 print(dbtolin(net.getweightedpath().loc["A->C->D->E->F->B", 'SNR']))
 print(10 * pow(erfcinv((3/2) * BERt), 2) * (Rs / Bn))
-print(2*Rs*math.log(1 + dbtolin(30)*(Rs/Bn), 2))
+print(2*Rs*math.log(1 + dbtolin(20)*(Rs/Bn), 2)*1e-9)
 '''
 
 #  lab6 es 2 plot on same figure bit rate curve vs GSNR in dB of each tech
-
+'''
 dB = list(range(1, 101))
 fixedrate = []
 flexrate = []
@@ -54,19 +54,18 @@ plt.title("Possible bitrates for each SNR")
 plt.xlabel("dB")
 plt.ylabel("Gbps")
 plt.show()
-
 '''
+
 conn = []
 nodeletters = net.getnodes()
 while len(conn) < 100:
     start = random.choice(nodeletters)
     end = random.choice(nodeletters)
     if start != end:
-        choice = random.randint(0, 9)
-        conn.append(el.Connection(start, end, 1e-3, ))
+        conn.append(el.Connection(start, end, 1e-3))
 
+'''
 net.stream(conn, 'latency')
-
 fig, (ax1, ax2) = plt.subplots(1, 2)
 ax1.grid()
 ax1.set_ylabel("seconds")
@@ -90,7 +89,51 @@ for c in conn:
     else:
         ax2.plot(c.getoutput(), c.getsnr(), marker='o', color='b', markersize=3)
 ax2.set_ylim(0, 100)
+'''
+
+# es 5 lab 6, histogram plot of average bit rates and total allocated capacity comparison for 3 transceiver tech
+fig2, (at1, at2) = plt.subplots(1, 2)
+at1.grid(axis="y")  # average bitrate
+at1.set_title("average bitrate")
+at2.grid(axis="y")  # total capacity
+at2.set_title("total capacity")
+at1.set_ylabel("Gbps")
+at2.set_ylabel("Gbps")
+
+net.stream(conn)  # fixed rate
+total_cap = 0
+average_br = 0
+xlabels = ["fixed-rate", "flex-rate", "shannon-rate"]
+xvalues = []
+xcap = []
+for c in conn:
+    total_cap += c.getbitrate()
+
+xvalues.append(total_cap/len(conn))
+xcap.append(total_cap)
+
+net = el.Network("../resources/nodesflex.json")  # flexrate
+net.connect()
+net.stream(conn)
+total_cap = 0
+average_br = 0
+for c in conn:
+    total_cap += c.getbitrate()
+xvalues.append(total_cap/len(conn))
+xcap.append(total_cap)
+
+net = el.Network("../resources/nodesshannon.json")  # shannon rate
+net.connect()
+net.stream(conn)
+total_cap = 0
+average_br = 0
+for c in conn:
+    total_cap += c.getbitrate()
+xvalues.append(total_cap/len(conn))
+xcap.append(total_cap)
+
+at1.bar(xlabels, xvalues)
+at2.bar(xlabels, xcap)
 
 plt.tight_layout()
 plt.show()
-'''

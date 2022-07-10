@@ -8,11 +8,12 @@ from science_utils import lintodb, dbtolin, BERt, Rs, Bn
 
 
 class Node:
-    def __init__(self, label, position, connected_nodes):
+    def __init__(self, label, position, connected_nodes, transceiver="fixed-rate"):
         self._label = label
         self._position = position
         self._connected_nodes = connected_nodes
         self._successive = {}
+        self._transceiver = transceiver
 
     def setlabel(self, label):
         self._label = label
@@ -37,6 +38,12 @@ class Node:
 
     def getsuccessive(self):
         return self._successive
+
+    def settransceiver(self, transceiver="fixed-rate"):
+        self._transceiver = transceiver
+
+    def gettransceiver(self):
+        return self._transceiver
 
     def propagate(self, signal):
         signal.updpath()
@@ -108,6 +115,8 @@ class Line:
                         signal.addnoise(self.noisegeneration(signal))
                         self._successive[path[0]].propagate(signal)
                     else:
+                        signal.setlat(0)
+                        signal.setnp(None)
                         print("canale occupato")
             else:
                 print("error, no successive node found")
@@ -145,7 +154,10 @@ class Network:
             self._nodes = dict()
             self._lines = dict()
             for n in nodelist:  # aggiungo i nodi alla rete
-                nodo = Node(n, network_data[n]["position"], network_data[n]["connected_nodes"])
+                if "transceiver" in network_data[n]:  # se presente nel json aggiunge il tipo di transceiver
+                    nodo = Node(n, network_data[n]["position"], network_data[n]["connected_nodes"], network_data[n]["transceiver"])
+                else:
+                    nodo = Node(n, network_data[n]["position"], network_data[n]["connected_nodes"])
                 for lin in network_data[n]["connected_nodes"]:  # aggiungo le linee collegate al nodo corrente
                     label = n+lin
                     linea = Line(label, 0, 10)  # la lunghezza sarà calcolata in seguito, 10 sono i canali per ex
@@ -365,13 +377,19 @@ class Network:
                             channel = i
                             break
                 signal = info.Lightpath(power, path, channel)
-                self.propagate(signal)
+                bitrate = self.calculate_bit_rate(path, self._nodes[path[0].upper()].gettransceiver())
+                if bitrate:
+                    self.propagate(signal)
+                else:  # se ritorna zero rifiuto la connessione
+                    signal.setnp(None)
                 if signal.getnp() is not None:  # None avviene nel caso il canale specificato non fosse valido
                     con.setlat(signal.getlat())
                     con.setsnr(lintodb(signal.getsp() / signal.getnp()))
+                    con.setbitrate(bitrate)
                 else:
                     con.setlat(0)
                     con.setsnr(None)
+                    con.setbitrate(0)
         self.freelines()
 
     def freelines(self):  # per liberare le linee al termine della funzione stream
@@ -401,7 +419,7 @@ class Network:
             if gsnr >= 10*pow(erfcinv((8/3)*BERt), 2)*(Rs/Bn):
                 return 400
         if strategy == "shannon-rate":
-            return 2*Rs*math.log2(1 + gsnr*(Rs/Bn))
+            return 2*Rs*math.log2(1 + gsnr*(Rs/Bn))*1e-9
         print("input strategy invalid")
 
 
@@ -413,6 +431,7 @@ class Connection:
         self._latency = 0.0
         self._snr = 0.0
         self._channel = channel
+        self._bit_rate = 0
 
     def getinput(self):
         return self._input
@@ -437,3 +456,9 @@ class Connection:
 
     def setsnr(self, snr):
         self._snr = snr
+
+    def getbitrate(self):
+        return self._bit_rate
+
+    def setbitrate(self, br):
+        self._bit_rate = br
