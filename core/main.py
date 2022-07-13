@@ -20,7 +20,7 @@ print(2*Rs*math.log(1 + dbtolin(20)*(Rs/Bn), 2)*1e-9)
 
 #  lab6 es 2 plot on same figure bit rate curve vs GSNR in dB of each tech
 '''
-dB = list(range(1, 101))
+dB = list(range(1, 51))
 fixedrate = []
 flexrate = []
 shannonrate = []
@@ -54,8 +54,8 @@ plt.title("Possible bitrates for each SNR")
 plt.xlabel("dB")
 plt.ylabel("Gbps")
 plt.show()
-'''
 
+'''
 conn = []
 nodeletters = net.getnodes()
 while len(conn) < 100:

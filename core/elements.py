@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import info
 from scipy.special import erfcinv
-from science_utils import lintodb, dbtolin, BERt, Rs, Bn
+from science_utils import lintodb, dbtolin, BERt, Rs, Bn, G, NF, Planck, Freq, Adb, b2, gamma, Alpha, Leff, df
 
 
 class Node:
@@ -72,8 +72,11 @@ class Line:
         self._length = length  # in meters
         self._successive = {}
         self._state = []  # stato dei canali, 1 = libero, 0 = occupato, indice = canale
+        self._n_amplifiers = 0
         for i in range(channels):
             self._state.append(1)
+        if length:
+            self._n_amplifiers = (length // 80000) + 2
 
     def setlabel(self, label):
         self._label = label
@@ -83,6 +86,7 @@ class Line:
 
     def setlength(self, length):
         self._length = length
+        self._n_amplifiers = (self._length // 80000) + 2
 
     def getlength(self):
         return self._length
@@ -144,6 +148,20 @@ class Line:
     def freechannels(self):  # libera tutti i canali
         for ch in self._state:
             self._state[ch] = 1
+
+    def ase_generation(self):
+        return self._n_amplifiers * (Planck*Freq*Bn*NF*(G-1))
+
+    def nli_generation(self, power):
+        a = (16/(27*math.pi))
+        ba = pow(math.pi, 2)/2
+        bb = (b2*pow(Rs, 2))/Alpha
+        bc = pow(len(self._state), 2*(Rs/df))
+        b = math.log(ba*bb*bc, 10)
+        c = ((gamma*gamma)/(4*Alpha*b2))*(1/pow(Rs, 3))
+        nnli = a*b*c
+        nspan = self._n_amplifiers-1
+        return power*pow(len(self._state, 3))*nnli*nspan*Bn  # formula da lab 7
 
 
 class Network:

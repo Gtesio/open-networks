@@ -1,3 +1,6 @@
+from science_utils import Rs, df
+
+
 class SignalInformation:
     def __init__(self, signal_power, path):
         self._signal_power = signal_power
@@ -49,6 +52,8 @@ class Lightpath(SignalInformation):
     def __init__(self, signal_power, path, channel=0):
         super().__init__(signal_power, path)
         self._channel = channel
+        self._Rs = Rs
+        self._df = df
 
     def getchannel(self):
         return self._channel
