@@ -159,7 +159,7 @@ class Line:
         bc = pow(len(self._state), 2*(Rs/df))
         b = math.log(ba*bb*bc, 10)
         c = ((gamma*gamma)/(4*Alpha*b2))*(1/pow(Rs, 3))
-        nnli = a*b*c
+        nnli = a*b*c  # pag 8 08_OLS.pdf
         nspan = self._n_amplifiers-1
         return power*pow(len(self._state, 3))*nnli*nspan*Bn  # formula da lab 7
 
