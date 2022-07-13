@@ -222,7 +222,7 @@ class Network:
         self.updateroutespace()
 
     def updateroutespace(self):
-        self._route_space = self._weighted_path
+        self._route_space = self._weighted_path.copy()
         indexes = list(self._route_space.index.values)  # percorsi con le "->"
         indexpath = []  # conterrà i percorsi senza le "->"
         choccupancy = None
