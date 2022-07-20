@@ -101,7 +101,10 @@ class Line:
         return self._length / 199e6
 
     def noisegeneration(self, signal):
-        return 1e-9 * signal.getsp() * self._length  # change with better formula later
+        # return 1e-9 * signal.getsp() * self._length  # change with better formula later
+        print("vecchio noise: ", 1e-9 * signal.getsp() * self._length)
+        print("nuovo noise", 1e-9 * (self.ase_generation() + self.nli_generation(signal.getsp())))
+        return 1e-9 * (self.ase_generation() + self.nli_generation(signal.getsp()))
 
     def propagate(self, signal):
         path = signal.getpath()
@@ -161,7 +164,7 @@ class Line:
         c = ((gamma*gamma)/(4*Alpha*b2))*(1/pow(Rs, 3))
         nnli = a*b*c  # pag 8 08_OLS.pdf
         nspan = self._n_amplifiers-1
-        return power*pow(len(self._state, 3))*nnli*nspan*Bn  # formula da lab 7
+        return power*pow(len(self._state), 3)*nnli*nspan*Bn  # formula da lab 7
 
 
 class Network:

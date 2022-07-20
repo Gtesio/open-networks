@@ -64,7 +64,7 @@ while len(conn) < 100:
     if start != end:
         conn.append(el.Connection(start, end, 1e-3))
 
-'''
+
 net.stream(conn, 'latency')
 fig, (ax1, ax2) = plt.subplots(1, 2)
 ax1.grid()
@@ -89,7 +89,7 @@ for c in conn:
     else:
         ax2.plot(c.getoutput(), c.getsnr(), marker='o', color='b', markersize=3)
 ax2.set_ylim(0, 100)
-'''
+
 
 # es 5 lab 6, histogram plot of average bit rates and total allocated capacity comparison for 3 transceiver tech
 fig2, (at1, at2) = plt.subplots(1, 2)
