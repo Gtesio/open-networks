@@ -1,0 +1,59 @@
+{
+    "A": {
+        "connected_nodes": [
+            "B",
+            "C"
+        ],
+        "position": [
+            -287922,
+            237915
+        ],
+        "transceiver": "flex-rate"
+    },
+    "B": {
+        "connected_nodes": [
+            "C",
+            "D",
+            "A",
+            "E"
+        ],
+        "position": [
+            402707,
+            -347939
+        ],
+        "transceiver": "flex-rate"
+    },
+    "C": {
+        "connected_nodes": [
+            "B",
+            "D",
+            "A"
+        ],
+        "position": [
+            375344,
+            123388
+        ],
+        "transceiver": "flex-rate"
+    },
+    "D": {
+        "connected_nodes": [
+            "C",
+            "B"
+        ],
+        "position": [
+            594850,
+            -337802
+        ],
+        "transceiver": "flex-rate"
+    },
+    "E": {
+        "connected_nodes": [
+            "B"
+        ],
+        "position": [
+            -272121,
+            422818
+        ],
+        "transceiver": "flex-rate"
+    }
+}

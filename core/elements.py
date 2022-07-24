@@ -1,8 +1,12 @@
 import json
 import math
+import random
+import time
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import info
+import numpy as np
 from scipy.special import erfcinv
 from science_utils import lintodb, dbtolin, BERt, Rs, Bn, G, NF, Planck, Freq, Adb, b2, gamma, Alpha, Leff, df
 
@@ -51,6 +55,7 @@ class Node:
         if path:
             nextline = self._label + path[0]
             if nextline in self._successive:
+                signal.setsp(self._successive[nextline].optimized_launch_power())
                 self._successive[nextline].propagate(signal)
             else:
                 print("Error: line " + nextline + " to " + nextline[1] + " nonexistent")
@@ -77,6 +82,7 @@ class Line:
             self._state.append(1)
         if length:
             self._n_amplifiers = (length // 80000) + 2
+        self._in_service = 1
 
     def setlabel(self, label):
         self._label = label
@@ -102,8 +108,8 @@ class Line:
 
     def noisegeneration(self, signal):
         # return 1e-9 * signal.getsp() * self._length  # change with better formula later
-        print("vecchio noise: ", 1e-9 * signal.getsp() * self._length)
-        print("nuovo noise", 1e-9 * (self.ase_generation() + self.nli_generation(signal.getsp())))
+        # print("vecchio noise: ", 1e-9 * signal.getsp() * self._length)
+        # print("nuovo noise", 1e-9 * (self.ase_generation() + self.nli_generation(signal.getsp())))
         return 1e-9 * (self.ase_generation() + self.nli_generation(signal.getsp()))
 
     def propagate(self, signal):
@@ -117,10 +123,14 @@ class Line:
                     signal.setnp(None)
                 else:
                     if self._state[channel]:  # controllo che il canale assegnato al segnale sia libero
-                        self._state[channel] = 0
-                        signal.addlatency(self.latencygeneration())
-                        signal.addnoise(self.noisegeneration(signal))
-                        self._successive[path[0]].propagate(signal)
+                        if self._in_service:
+                            self._state[channel] = 0
+                            signal.addlatency(self.latencygeneration())
+                            signal.addnoise(self.noisegeneration(signal))
+                            self._successive[path[0]].propagate(signal)
+                        else:
+                            signal.setlat(0)
+                            signal.setnp(None)
                     else:
                         signal.setlat(0)
                         signal.setnp(None)
@@ -149,8 +159,13 @@ class Line:
         return self._state
 
     def freechannels(self):  # libera tutti i canali
-        for ch in self._state:
-            self._state[ch] = 1
+        if self._in_service:
+            for ch in range(len(self._state)):
+                self._state[ch] = 1
+
+    def closechannels(self):
+        for ch in range(len(self._state)):
+            self._state[ch] = 0
 
     def ase_generation(self):
         return self._n_amplifiers * (Planck*Freq*Bn*NF*(G-1))
@@ -165,6 +180,26 @@ class Line:
         nnli = a*b*c  # pag 8 08_OLS.pdf
         nspan = self._n_amplifiers-1
         return power*pow(len(self._state), 3)*nnli*nspan*Bn  # formula da lab 7
+
+    def optimized_launch_power(self):  # incrementi di 1 mW
+        power = 1e-3
+        ase = self.ase_generation()  # inutile calcolarlo più di una volta
+        gsnr = power / (ase + self.nli_generation(power))
+        npower = power
+        ngsnr = gsnr
+        while gsnr == ngsnr:
+            npower += 1e-3
+            ngsnr = npower / (self.ase_generation() + self.nli_generation(npower))
+            if ngsnr > gsnr:
+                gsnr = ngsnr
+                power = npower
+        return power
+
+    def getservice(self):
+        return self._in_service
+
+    def setservice(self, value=1):
+        self._in_service = value
 
 
 class Network:
@@ -194,6 +229,8 @@ class Network:
                 # print(self._lines[lin].getlabel())
         self._weighted_path = None
         self._route_space = None
+        self._logger = pd.DataFrame({'epoch': pd.Series(dtype='float'), 'path': pd.Series(dtype='string'),
+                                     'channel ID': pd.Series(dtype='string'), 'bit rate': pd.Series(dtype='int')})
 
     def connect(self):
         for node in self._nodes:  # collego i nodi impostando nella var successive il dizionario con le relative linee
@@ -320,18 +357,21 @@ class Network:
             indexes = []
             channelstatus = None  # creo
             for pp in ppaths:  # controllo che tutte le linee del percorso siano libere su almeno un canale
+                #  lineinservice = 1  # inizialmente assumo la linea funzionare
                 if channelstatus is not None:  # significa che ho fatto il ciclo almeno una volta e quindi preparo la
                     for chs in range(len(channelstatus)):  # variable per l'utilizzo in un nuovo percorso
                         channelstatus[chs] = 1
                 for i in range(len(pp)-1):
                     line = str(pp[i])+str(pp[i+1])
                     chstate = self._lines[line].getstate()
+                    # if not self._lines[line].getservice():  # se una linea è disabilitata, il percorso non è valido
+                        # lineinservice = 0
                     if channelstatus is None:  # durante il primo ciclo imposto la lunghezza della variabile ipotizzando
-                        channelstatus = [[] for i in range(len(chstate))]  # il numero di canali sia costante su tutta la rete
+                        channelstatus = [[1] for i in range(len(chstate))]  # il numero di canali sia costante su tutta la rete
                     for ch in range(len(chstate)):
                         if not chstate[ch]:  # se c'è anche solo un canale occupato su un tratto, tutto il percorso su
                             channelstatus[ch] = 0  # quel canale non è valido
-                if 1 in channelstatus:  # se è presente anche solo un canale libero allora il percorso è valido
+                if 1 in channelstatus: # and lineinservice:  # se è presente anche solo un canale libero, e non ci sono tratti con guasti allora il percorso è valido
                     indexes.append('->'.join(pp))
             wdf = self.getroutespace()
             wdf = wdf.filter(items=indexes, axis=0)
@@ -350,18 +390,21 @@ class Network:
             indexes = []
             channelstatus = None  # creo
             for pp in ppaths:  # controllo che tutte le linee del percorso siano libere su almeno un canale
+                # lineinservice = 1
                 if channelstatus is not None:  # significa che ho fatto il ciclo almeno una volta e quindi preparo la
                     for chs in range(len(channelstatus)):  # variable per l'utilizzo in un nuovo percorso
                         channelstatus[chs] = 1
                 for i in range(len(pp) - 1):
                     line = str(pp[i]) + str(pp[i + 1])
                     chstate = self._lines[line].getstate()
+                    # if not self._lines[line].getservice():  # se una linea è disabilitata, il percorso non è valido
+                    #   lineinservice = 0
                     if channelstatus is None:  # durante il primo ciclo imposto la lunghezza della variabile ipotizzando
-                        channelstatus = [[] for i in range(len(chstate))]  # il numero di canali sia costante su tutta la rete
+                        channelstatus = [[1] for i in range(len(chstate))]  # il numero di canali sia costante su tutta la rete
                     for ch in range(len(chstate)):
                         if not chstate[ch]:  # se c'è anche solo un canale occupato su un tratto, tutto il percorso su
                             channelstatus[ch] = 0  # quel canale non è valido
-                if 1 in channelstatus:  # se è presente anche solo un canale libero allora il percorso è valido
+                if 1 in channelstatus:  # and lineinservice:  # se è presente anche solo un canale libero allora il percorso è valido
                     indexes.append('->'.join(pp))
             wdf = self.getroutespace()
             wdf = wdf.filter(items=indexes, axis=0)
@@ -388,6 +431,7 @@ class Network:
             else:
                 pathindex = ''.join(result.keys())
                 path = pathindex.replace("->", "")
+                con.setpath(pathindex)
                 power = con.getsp()
                 channel = con.getchannel()
                 if channel is None:  # non ho assegnato un canale a priori quindi cerco il primo libero
@@ -396,6 +440,7 @@ class Network:
                     for i in range(rs.shape[1]):  # ottengo il numero di colonne che corrisponde al num di canali
                         if rs.loc[pathindex, i]:  # assegno il primo libero
                             channel = i
+                            con.setchannel(channel)
                             break
                 signal = info.Lightpath(power, path, channel)
                 bitrate = self.calculate_bit_rate(path, self._nodes[path[0].upper()].gettransceiver())
@@ -403,6 +448,9 @@ class Network:
                     self.propagate(signal)
                 else:  # se ritorna zero rifiuto la connessione
                     signal.setnp(None)
+                    con.setlat(0)
+                    con.setsnr(None)
+                    con.setbitrate(0)
                 if signal.getnp() is not None:  # None avviene nel caso il canale specificato non fosse valido
                     con.setlat(signal.getlat())
                     con.setsnr(lintodb(signal.getsp() / signal.getnp()))
@@ -411,7 +459,7 @@ class Network:
                     con.setlat(0)
                     con.setsnr(None)
                     con.setbitrate(0)
-        self.freelines()
+        # self.freelines()  # per run consecutive utilizzarlo qui, oppure ricordarsi di usarlo nel main dopo stream()
 
     def freelines(self):  # per liberare le linee al termine della funzione stream
         for line in self._lines:
@@ -443,6 +491,77 @@ class Network:
             return 2*Rs*math.log2(1 + gsnr*(Rs/Bn))*1e-9
         print("input strategy invalid")
 
+    def traffic_matrix_stream(self, traffic_matrix, multiplier=1):
+        utm = np.copy(traffic_matrix)
+        nodes = self.getnodes()
+        con = [1]
+        ris = []
+        while not np.all((utm == 0)):
+            indexes = np.where(utm != 0)  # 2 liste (x,y) di elementi non 0
+            ind = random.choice(list(range(len(np.where(utm != 0)[0]))))  # scelgo l'indice X di un elemento non 0
+            # quindi indexes[0][ind] è la X del mio valore e indexes[1][ind] è la Y, nella matrice utm
+            xind = indexes[0][ind]
+            yind = indexes[1][ind]
+            if utm[xind][yind] == 'Inf':
+                while utm[xind][yind] == 'Inf':
+                    con[0] = Connection(nodes[xind], nodes[yind])
+                    self.stream(con, "snr")  # creo connessioni ad oltranza fino al primo rifiuto
+                    if con[0].getbitrate() >= 100 * multiplier:
+                        ris.append(con[0])
+                        self.update_logger(con[0])
+                    else:
+                        utm[xind][yind] = 0
+            else:  # la cella di utm non è Inf, quindi faccio solo una connessione
+                con[0] = Connection(nodes[xind], nodes[yind])
+                self.stream(con, "snr")
+                if con[0].getbitrate() >= 100 * multiplier:  # il val nella cella utm / 100 rappresenta N connessioni, multiplier rappresenta il Br richiesto da ogni connessione
+                    utm[xind][yind] -= 100  # rimuovo una connessione dalla matrice
+                    ris.append(con[0])  # aggiungo quella connessione ai risultati
+                    self.update_logger(con[0])
+                else:  # significa che il Br richiesto non è soddisfatto
+                    con[0].setlat(0)
+                    con[0].setsnr(None)
+                    con[0].setbitrate(0)
+                    while utm[xind][yind] > 0:  # rifiuto tutte le connessioni successive e le aggiungo ai risultati
+                        ris.append(con[0])
+                        self.update_logger(con[0])
+                        utm[xind][yind] -= 100
+        self.freelines()
+        return ris
+
+    def get_logger(self):
+        return self._logger
+
+    def update_logger(self, signal):
+        log = pd.DataFrame({'epoch': [time.time()], 'path': [signal.getpath()],
+                            'channel ID': [signal.getchannel()], 'bit rate': [signal.getbitrate()]})
+        self._logger = pd.concat([self._logger, log], ignore_index=True)
+
+    def clear_logger(self):
+        self._logger = self._logger[0:0]
+
+    def strong_failure(self, node):
+        link = random.choice(self._nodes[node].getconnectednodes())  # scelgo uno tra i nodi collegati a questo nodo
+        line = link + node  # e taglio la linea tra i due nodi in direzione del nodo fornito
+        self._lines[line].setservice(0)
+
+    def traffic_recovery(self):
+        for (index, row) in self._logger.iterrows():
+            if row['bit rate'] == 0 and row['path'] != []:
+                path = row['path'].replace("->", "")
+                for i in range(len(path) - 1):
+                    line = str(path[i]) + str(path[i + 1])
+                    if not self._lines[line].getservice():  # se non è in servizio imposto tutti i canali a 0, cioè occupati
+                        self._lines[line].closechannels()
+        self.clear_logger()
+        self.freelines()
+        self.updateroutespace()
+    # ho modificato il punto 4 lab 9, perchè chiedeva d'includere il controllo del servizio nella funzione stream,
+    # ma così facendo veniva automaticamente realizzato il traffic recovery, perchè la linea non veniva usata
+    # in questo modo invece una linea 'tagliata' è invisibile alla route space, che continua a mandarci segnali attraverso
+    # nonostante non arrivino a destinazione. Dopo aver chiamato traffic_recovery(), invece, la linea viene correttamente
+    # segnata come inutilizzabile, e il traffico verrà quindi ridirezionato su altre linee, riducendo però il traffico totale
+
 
 class Connection:
     def __init__(self, input, output, signal_power=1e-3, channel=None):
@@ -453,6 +572,7 @@ class Connection:
         self._snr = 0.0
         self._channel = channel
         self._bit_rate = 0
+        self._path = []
 
     def getinput(self):
         return self._input
@@ -472,6 +592,9 @@ class Connection:
     def getchannel(self):
         return self._channel
 
+    def setchannel(self, channel):
+        self._channel = channel
+
     def setlat(self, lat):
         self._latency = lat
 
@@ -483,3 +606,9 @@ class Connection:
 
     def setbitrate(self, br):
         self._bit_rate = br
+
+    def setpath(self, path):
+        self._path = path
+
+    def getpath(self):
+        return self._path
