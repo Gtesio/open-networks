@@ -53,7 +53,7 @@ plt.show()
 '''
 
 # random 100 connections
-'''
+
 conn = []
 nodeletters = net.getnodes()
 while len(conn) < 100:
@@ -61,9 +61,9 @@ while len(conn) < 100:
     end = random.choice(nodeletters)
     if start != end:
         conn.append(el.Connection(start, end))
-'''
-# traffic matrix
 
+# traffic matrix
+'''
 nodes = net.getnodes()
 utm = np.zeros((len(nodes), len(nodes)))
 for i in range(100):
@@ -73,8 +73,9 @@ for i in range(100):
     ylist.remove(x)  # non posso scegliere come destinazione il nodo di partenza
     y = random.choice(ylist)
     utm[x][y] += 100
-
+'''
 # cerco la coppia di nodi tra cui c'è più traffico
+'''
 indexes = np.where(utm == np.amax(utm))
 nodebroken = nodes[indexes[1][0]]  # prendo il nodo di destinazione
 
@@ -92,7 +93,7 @@ net.traffic_recovery()
 
 conn = net.traffic_matrix_stream(utm, 1)
 draw_graph8(conn, 10)
-
+'''
 #  lab 8 graph comparison
 '''
 connessioni = net.traffic_matrix_stream(utm, 1)
@@ -124,33 +125,41 @@ connessioni = net.traffic_matrix_stream(utm, 7)
 draw_graph8(connessioni, 30)
 '''
 # graph for snr and latency early lab
-'''
+
 net.stream(conn, 'latency')
 fig, (ax1, ax2) = plt.subplots(1, 2)
 ax1.grid()
 ax1.set_ylabel("seconds")
-ax1.set_title("latency towards each node")
+ax1.set_title("latency distribution")
+latencies = []
+allsnr = []
 for c in conn:
     if c.getsnr() is None:
-        ax1.plot(c.getoutput(), 0, marker='x', color='r')
+        # ax1.plot(c.getoutput(), 0, marker='x', color='r')
+        latencies.append(0)
     else:
-        ax1.plot(c.getoutput(), c.getlat(), marker='o', color='b', markersize=3)
+        # ax1.plot(c.getoutput(), c.getlat(), marker='o', color='b', markersize=3)
+        latencies.append(c.getlat())
 
-ax1.set_ylim(0, 0.005)
+# ax1.set_ylim(0, 0.005)
+ax1.hist(latencies, bins=20)
 net.freelines()
 net.stream(conn, 'snr')
 
 ax2.grid()
 ax2.set_ylabel("dB")
-ax2.set_title("snr towards each node")
+ax2.set_title("snr distribution")
 for c in conn:
     if c.getsnr() is None:
-        ax2.plot(c.getoutput(), 0, marker='x', color='r')
+        # ax2.plot(c.getoutput(), 0, marker='x', color='r')
+        allsnr.append(0)
     else:
-        ax2.plot(c.getoutput(), c.getsnr(), marker='o', color='b', markersize=3)
-ax2.set_ylim(0, 100)
+        # ax2.plot(c.getoutput(), c.getsnr(), marker='o', color='b', markersize=3)
+        allsnr.append(c.getsnr())
+# ax2.set_ylim(0, 100)
+ax2.hist(allsnr, bins=20)
 net.freelines()
-'''
+
 # es 5 lab 6 e 6 lab 8, average bit rates and total allocated capacity comparison for 3 transceiver tech
 '''
 fig2, (at1, at2, at3) = plt.subplots(1, 3)
@@ -236,7 +245,6 @@ at3.legend(loc='upper right')
 '''
 
 # print graph
-'''
+
 plt.tight_layout()
 plt.show()
-'''
